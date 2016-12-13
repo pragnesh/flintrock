@@ -800,9 +800,9 @@ def run_command_node(*, user: str, host: str, identity_file: str, command: tuple
     command_str = ' '.join(command)
 
     with ssh_client:
-        ssh_check_output(
+        print(ssh_check_output(
             client=ssh_client,
-            command=command_str)
+            command=command_str))
 
     logger.info("[{h}] Command complete.".format(h=host))
 
