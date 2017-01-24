@@ -442,7 +442,7 @@ def generate_template_mapping(
         'master_ip': cluster.master_ip,
         'master_host': cluster.master_host,
         'slave_ips': '\n'.join(cluster.slave_ips),
-        'slave_hosts': '\n'.join(cluster.slave_hosts),
+        'slave_hosts': '\n'.join([cluster.master_host] + cluster.slave_hosts),
 
         'hadoop_version': hadoop_version,
         'hadoop_short_version': '.'.join(hadoop_version.split('.')[:2]),
