@@ -573,6 +573,13 @@ def get_or_create_flintrock_security_groups(
             from_port=6066,
             to_port=6066,
             cidr_ip=flintrock_client_cidr,
+            src_group=None),
+        # Alluxio UI
+        SecurityGroupRule(
+            ip_protocol='tcp',
+            from_port=19999,
+            to_port=19999,
+            cidr_ip=flintrock_client_cidr,
             src_group=None)
     ]
 

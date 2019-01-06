@@ -6,6 +6,7 @@ import sys
 import urllib.error
 import urllib.request
 import logging
+import time
 
 # External modules
 import paramiko
@@ -423,3 +424,141 @@ class Spark(FlintrockService):
             #       being up; provide a slightly better error message, and don't
             #       dump a large stack trace on the user.
             raise Exception("Spark health check failed.") from e
+
+class ALLUXIO(FlintrockService):
+    def __init__(self, *, version, download_source):
+        self.version = version
+        self.download_source = download_source
+        self.manifest = {'version': version, 'download_source': download_source}
+
+    def install(
+            self,
+            ssh_client: paramiko.client.SSHClient,
+            cluster: FlintrockCluster):
+        logger.info("[{h}] Installing Alluxio...".format(
+            h=ssh_client.get_transport().getpeername()[0]))
+
+        with ssh_client.open_sftp() as sftp:
+            sftp.put(
+                localpath=os.path.join(SCRIPTS_DIR, 'download-package.py'),
+                remotepath='/tmp/download-package.py')
+
+        ssh_check_output(
+            client=ssh_client,
+            command="""
+                set -e
+
+                python /tmp/download-package.py "{download_source}" "alluxio"
+
+                for f in $(find alluxio/bin -type f -executable -not -name '*.cmd'); do
+                    sudo ln -s "$(pwd)/$f" "/usr/local/bin/$(basename $f)"
+                done
+
+                echo "export ALLUXIO_HOME='$(pwd)/alluxio'" >> .bashrc
+            """.format(
+                version=self.version,
+                download_source=self.download_source.format(v=self.version),
+            ))
+
+    def configure(
+            self,
+            ssh_client: paramiko.client.SSHClient,
+            cluster: FlintrockCluster):
+        # TODO: os.walk() through these files.
+        template_paths = [
+            'alluxio/conf/alluxio-env.sh',
+            'alluxio/conf/alluxio-site.properties',
+            'alluxio/conf/masters',
+            'alluxio/conf/workers'
+        ]
+
+        ssh_check_output(
+            client=ssh_client,
+            command="mkdir -p alluxio/conf",
+        )
+
+        for template_path in template_paths:
+            ssh_check_output(
+                client=ssh_client,
+                command="""
+                    echo {f} > {p}
+                """.format(
+                    f=shlex.quote(
+                        get_formatted_template(
+                            path=os.path.join(THIS_DIR, "templates", template_path),
+                            mapping=generate_template_mapping(
+                                cluster=cluster,
+                                hadoop_version='',
+                                # Hadoop doesn't need to know what
+                                # Spark version we're using.
+                                spark_version='',
+                                spark_executor_instances=0,
+                            ))),
+                    p=shlex.quote(template_path)))
+
+    # TODO: Convert this into start_master() and split master- or slave-specific
+    #       stuff out of configure() into configure_master() and configure_slave().
+    def configure_master(
+            self,
+            ssh_client: paramiko.client.SSHClient,
+            cluster: FlintrockCluster):
+        host = ssh_client.get_transport().getpeername()[0]
+        logger.info("[{h}] Configuring Alluxio master...".format(h=host))
+
+        ssh_check_output(
+            client=ssh_client,
+            command="""
+                # `|| true` because on cluster restart this command will fail.
+                ./alluxio/bin/alluxio format || true
+            """)
+
+        # This loop is a band-aid for: https://github.com/nchammas/flintrock/issues/157
+        attempt_limit = 3
+        for attempt in range(attempt_limit):
+            try:
+                ssh_check_output(
+                    client=ssh_client,
+                    command="""
+                        ./alluxio/bin/alluxio-start.sh all SudoMount
+
+                        master_ui_response_code=0
+                        while [ "$master_ui_response_code" -ne 200 ]; do
+                            sleep 1
+                            master_ui_response_code="$(
+                                curl --head --silent --output /dev/null \
+                                    --write-out "%{{http_code}}" {m}:19999
+                            )"
+                        done
+                    """.format(m=shlex.quote(cluster.master_host)),
+                    timeout_seconds=90
+                )
+                break
+            except socket.timeout as e:
+                logger.debug(
+                    "Timed out waiting for Alluxio master to come up.{}"
+                    .format(" Trying again..." if attempt < attempt_limit - 1 else "")
+                )
+        else:
+            raise Exception("Time out waiting for Alluxio master to come up.")
+
+    def health_check(self, master_host: str):
+        # This info is not helpful as a detailed health check, but it gives us
+        # an up / not up signal.
+        alluxio_master_ui = 'http://{m}:19999/api/v1/master/info/'.format(m=master_host)
+        attempt_limit = 3
+        for attempt in range(attempt_limit):
+            try:
+                json.loads(
+                    urllib.request
+                    .urlopen(alluxio_master_ui)
+                    .read()
+                    .decode('utf-8'))
+                logger.info("Alluxio online.")
+                break
+            except Exception as e:
+                if attempt < attempt_limit:
+                    print("retry after 60 sec")
+                    time.sleep(60)
+                else:
+                    raise Exception("HDFS health check failed.") from e
+
