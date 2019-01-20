@@ -25,7 +25,7 @@ if __name__ == '__main__':
         os.makedirs(destination_dir, mode=0o755)
     except OSError as e:
         if e.errno == errno.EEXIST:
-            pass
+            sys.exit(0)
         else:
             raise
 
