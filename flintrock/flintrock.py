@@ -303,6 +303,7 @@ def cli(cli_context, config, provider, debug):
 @click.option('--ec2-vpc-id', default='', help="Leave empty for default VPC.")
 @click.option('--ec2-subnet-id', default='')
 @click.option('--ec2-instance-profile-name', default='')
+@click.option('--ec2-spot-fleet-role-name', default='')
 @click.option('--ec2-placement-group', default='')
 @click.option('--ec2-tenancy', default='default')
 @click.option('--ec2-ebs-optimized/--no-ec2-ebs-optimized', default=False)
@@ -344,6 +345,7 @@ def launch(
         ec2_vpc_id,
         ec2_subnet_id,
         ec2_instance_profile_name,
+        ec2_spot_fleet_role_name,
         ec2_placement_group,
         ec2_tenancy,
         ec2_ebs_optimized,
@@ -448,6 +450,7 @@ def launch(
             vpc_id=ec2_vpc_id,
             subnet_id=ec2_subnet_id,
             instance_profile_name=ec2_instance_profile_name,
+            spot_fleet_role_name=ec2_spot_fleet_role_name,
             placement_group=ec2_placement_group,
             tenancy=ec2_tenancy,
             ebs_optimized=ec2_ebs_optimized,
