@@ -284,7 +284,7 @@ class EC2Cluster(FlintrockCluster):
             instance_profile_arn = ''
         else:
             instance_profile_arn = self.master_instance.iam_instance_profile['Arn']
-
+        spot_fleet_role_arn = ''
         self.add_slaves_check()
         try:
             new_slave_instances = _create_instances(
@@ -302,6 +302,7 @@ class EC2Cluster(FlintrockCluster):
                 security_group_ids=security_group_ids,
                 subnet_id=self.master_instance.subnet_id,
                 instance_profile_arn=instance_profile_arn,
+                spot_fleet_role_arn=spot_fleet_role_arn,
                 ebs_optimized=self.master_instance.ebs_optimized,
                 instance_initiated_shutdown_behavior=instance_initiated_shutdown_behavior,
                 user_data=user_data)
@@ -462,13 +463,14 @@ def check_network_config(*, region_name: str, vpc_id: str, subnet_id: str):
             "See: https://github.com/nchammas/flintrock/issues/43"
             .format(v=vpc_id)
         )
-    if not ec2.Subnet(subnet_id).map_public_ip_on_launch:
-        raise ConfigurationNotSupported(
-            "{s} does not auto-assign public IP addresses. "
-            "Flintrock requires public IP addresses.\n"
-            "See: https://github.com/nchammas/flintrock/issues/14"
-            .format(s=subnet_id)
-        )
+    for every_subnet_id in subnet_id.split(","):
+        if not ec2.Subnet(every_subnet_id.strip()).map_public_ip_on_launch:
+            raise ConfigurationNotSupported(
+                "{s} does not auto-assign public IP addresses. "
+                "Flintrock requires public IP addresses.\n"
+                "See: https://github.com/nchammas/flintrock/issues/14"
+                .format(s=every_subnet_id.strip())
+            )
 
 
 def get_security_groups(
@@ -700,6 +702,7 @@ def _create_instances(
         security_group_ids,
         subnet_id,
         instance_profile_arn,
+        spot_fleet_role_arn,
         ebs_optimized,
         instance_initiated_shutdown_behavior,
         user_data) -> 'List[boto3.resources.factory.ec2.Instance]':
@@ -709,7 +712,59 @@ def _create_instances(
     spot_requests = []
 
     try:
-        if spot_price:
+        if spot_price and (',' in instance_type or ',' in subnet_id):
+            user_data = base64.b64encode(user_data.encode('utf-8')).decode()
+            logger.info("Requesting {c} spot instances at a max price of ${p}...".format(
+                c=num_instances, p=spot_price))
+            client = ec2.meta.client
+            launch_specifications = []
+            for every_instance_type in instance_type.split(","):
+                for every_subnet_id in subnet_id.split(","):
+                    launch_specifications.append(
+                        {
+                            'ImageId': ami,
+                            'KeyName': key_name,
+                            'InstanceType': every_instance_type.strip(),
+                            'BlockDeviceMappings': block_device_mappings,
+                            'Placement': {
+                                'AvailabilityZone': availability_zone,
+                                'GroupName': placement_group},
+                            'SecurityGroups': [{ 'GroupId': security_group_id } for security_group_id in security_group_ids ],
+                            'SubnetId': every_subnet_id.strip(),
+                            'IamInstanceProfile': {
+                                'Arn': instance_profile_arn,
+                            },
+                            'EbsOptimized': ebs_optimized,
+                            'UserData': user_data
+                        }
+                    )
+            spot_fleet_request = client.request_spot_fleet(
+                SpotFleetRequestConfig={
+                    'AllocationStrategy': 'capacityOptimized',
+                    'IamFleetRole': spot_fleet_role_arn,
+                    'LaunchSpecifications': launch_specifications,
+                    'SpotPrice': str(spot_price),
+                    'TargetCapacity': num_instances,
+                    'Type': 'request'
+                },
+            )
+            spot_fleet_request_ids = [spot_fleet_request['SpotFleetRequestId']]
+            is_pending_spot_fleet_request_id = True
+            while is_pending_spot_fleet_request_id:
+                time.sleep(30)
+                spot_fleet_request = client.describe_spot_fleet_requests(
+                    SpotFleetRequestIds=spot_fleet_request_ids)['SpotFleetRequestConfigs'][0]
+                if 'ActivityStatus' in spot_fleet_request and spot_fleet_request['ActivityStatus'] == 'fulfilled':
+                    is_pending_spot_fleet_request_id = False
+            logger.info("All {c} instances granted.".format(c=num_instances))
+
+            cluster_instances = list(
+                ec2.instances.filter(
+                    Filters=[
+                        {'Name': 'tag:aws:ec2spot:fleet-request-id',
+                         'Values': spot_fleet_request_ids}
+                    ]))
+        elif spot_price:
             user_data = base64.b64encode(user_data.encode('utf-8')).decode()
             logger.info("Requesting {c} spot instances at a max price of ${p}...".format(
                 c=num_instances, p=spot_price))
@@ -835,6 +890,7 @@ def launch(
         vpc_id,
         subnet_id,
         instance_profile_name,
+        spot_fleet_role_name,
         placement_group,
         tenancy='default',
         ebs_optimized=False,
@@ -892,7 +948,10 @@ def launch(
         instance_profile_arn = iam.InstanceProfile(instance_profile_name).arn
     else:
         instance_profile_arn = ''
-
+    if spot_fleet_role_name:
+        spot_fleet_role_arn = iam.Role(spot_fleet_role_name).arn
+    else:
+        spot_fleet_role_arn = ''
     num_instances = num_slaves + 1
     if user_data is not None:
         user_data = user_data.read()
@@ -915,6 +974,7 @@ def launch(
             security_group_ids=security_group_ids,
             subnet_id=subnet_id,
             instance_profile_arn=instance_profile_arn,
+            spot_fleet_role_arn=spot_fleet_role_arn,
             ebs_optimized=ebs_optimized,
             instance_initiated_shutdown_behavior=instance_initiated_shutdown_behavior,
             user_data=user_data)
