@@ -36,3 +36,5 @@ fi
 
 # Should this be made part of a Python service somehow?
 export PYSPARK_PYTHON="python3"
+ulimit -n 65536
+ulimit -u 65536
