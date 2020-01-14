@@ -154,33 +154,6 @@ class EC2Cluster(FlintrockCluster):
         super().destroy()
         ec2 = boto3.resource(service_name='ec2', region_name=self.region)
 
-        # TODO: Centralize logic to get Flintrock base security group. (?)
-        flintrock_base_group = list(
-            ec2.security_groups.filter(
-                Filters=[
-                    {'Name': 'group-name', 'Values': ['flintrock']},
-                    {'Name': 'vpc-id', 'Values': [self.vpc_id]},
-                ]))[0]
-
-        # We "unassign" the cluster security group here (i.e. the
-        # 'flintrock-clustername' group) so that we can immediately delete it once
-        # the instances are terminated. If we don't do this, we get dependency
-        # violations for a couple of minutes before we can actually delete the group.
-        # TODO: Is there a way to do this in one call for all instances?
-        #       Do we need to throttle these calls?
-        for instance in self.instances:
-            instance.modify_attribute(
-                Groups=[flintrock_base_group.id])
-
-        # TODO: Centralize logic to get cluster security group name from cluster name.
-        cluster_group = list(
-            ec2.security_groups.filter(
-                Filters=[
-                    {'Name': 'group-name', 'Values': ['flintrock-' + self.name]},
-                    {'Name': 'vpc-id', 'Values': [self.vpc_id]},
-                ]))[0]
-        cluster_group.delete()
-
         (ec2.instances
             .filter(
                 Filters=[
