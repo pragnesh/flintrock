@@ -260,6 +260,8 @@ class EC2Cluster(FlintrockCluster):
         else:
             instance_profile_arn = self.master_instance.iam_instance_profile['Arn']
         spot_fleet_role_arn = ''
+        launch_template_id = ''
+        launch_template_version = ''
         self.add_slaves_check()
         try:
             new_slave_instances = _create_instances(
@@ -276,6 +278,8 @@ class EC2Cluster(FlintrockCluster):
                 tenancy=self.master_instance.placement['Tenancy'],
                 security_group_ids=security_group_ids,
                 subnet_id=self.master_instance.subnet_id,
+                launch_template_id=launch_template_id,
+                launch_template_version=launch_template_version,
                 instance_profile_arn=instance_profile_arn,
                 spot_fleet_role_arn=spot_fleet_role_arn,
                 ebs_optimized=self.master_instance.ebs_optimized,
@@ -638,6 +642,8 @@ def _create_instances(
         tenancy,
         security_group_ids,
         subnet_id,
+        launch_template_id,
+        launch_template_version,
         instance_profile_arn,
         spot_fleet_role_arn,
         ebs_optimized,
@@ -649,7 +655,70 @@ def _create_instances(
     spot_requests = []
 
     try:
-        if spot_price and (',' in instance_type or ',' in subnet_id):
+        if launch_template_id and launch_template_version:
+            logger.info("Requesting {c} spot instances at a max price of ${p} using launch template...".format(
+                c=num_instances, p=spot_price))
+            client = ec2.meta.client
+            launch_template_configs = []
+            overrides = []
+            for every_instance_type in instance_type.split(","):
+                for every_subnet_id in subnet_id.split(","):
+                    overrides.append(
+                        {
+                            'InstanceType': every_instance_type.strip(),
+                            'SubnetId': every_subnet_id.strip()
+                        }
+                    )
+            launch_template_configs.append(
+                {
+                    'LaunchTemplateSpecification': {
+                        'LaunchTemplateId': launch_template_id,
+                        'Version': str(launch_template_version)
+                    },
+                    'Overrides': overrides
+
+                }
+            )
+            fleet_request = client.create_fleet(
+                SpotOptions={
+                    'AllocationStrategy': 'capacity-optimized',
+                    'InstanceInterruptionBehavior': 'terminate',
+                    'SingleInstanceType': True,
+                    'SingleAvailabilityZone': True,
+                    'MinTargetCapacity': num_instances,
+                    'MaxTotalPrice': str(spot_price)
+                },
+                OnDemandOptions={
+                    'AllocationStrategy': 'lowest-price',
+                    'SingleInstanceType': True,
+                    'SingleAvailabilityZone': True,
+                    'MinTargetCapacity': 0,
+                    'MaxTotalPrice': str(spot_price)
+                },
+                LaunchTemplateConfigs=launch_template_configs,
+                TargetCapacitySpecification={
+                    'TotalTargetCapacity': num_instances,
+                    'OnDemandTargetCapacity': 0,
+                    'SpotTargetCapacity': num_instances,
+                    'DefaultTargetCapacityType': 'spot'
+                },
+                Type='instant',
+                ReplaceUnhealthyInstances=False,
+            )
+            logger.info("All {c} instances granted.".format(c=num_instances))
+
+            instance_ids = []
+            for instances in fleet_request['Instances']:
+                for instance_id in instances['InstanceIds']:
+                    instance_ids.append(instance_id)
+
+            cluster_instances = list(
+                ec2.instances.filter(
+                    Filters=[
+                        {'Name': 'instance-id',
+                         'Values': instance_ids}
+                    ]))
+        elif spot_price and (',' in instance_type or ',' in subnet_id):
             user_data = base64.b64encode(user_data.encode('utf-8')).decode()
             logger.info("Requesting {c} spot instances at a max price of ${p}...".format(
                 c=num_instances, p=spot_price))
@@ -826,6 +895,8 @@ def launch(
         min_root_ebs_size_gb,
         vpc_id,
         subnet_id,
+        launch_template_id,
+        launch_template_version,
         instance_profile_name,
         spot_fleet_role_name,
         placement_group,
@@ -911,6 +982,8 @@ def launch(
             tenancy=tenancy,
             security_group_ids=security_group_ids,
             subnet_id=subnet_id,
+            launch_template_id=launch_template_id,
+            launch_template_version=launch_template_version,
             instance_profile_arn=instance_profile_arn,
             spot_fleet_role_arn=spot_fleet_role_arn,
             ebs_optimized=ebs_optimized,

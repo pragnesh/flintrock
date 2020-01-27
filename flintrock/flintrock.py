@@ -302,6 +302,8 @@ def cli(cli_context, config, provider, debug):
 @click.option('--ec2-min-root-ebs-size-gb', type=int, default=30)
 @click.option('--ec2-vpc-id', default='', help="Leave empty for default VPC.")
 @click.option('--ec2-subnet-id', default='')
+@click.option('--ec2-launch-template-id', default='')
+@click.option('--ec2-launch-template-version', default='')
 @click.option('--ec2-instance-profile-name', default='')
 @click.option('--ec2-spot-fleet-role-name', default='')
 @click.option('--ec2-placement-group', default='')
@@ -344,6 +346,8 @@ def launch(
         ec2_min_root_ebs_size_gb,
         ec2_vpc_id,
         ec2_subnet_id,
+        ec2_launch_template_id,
+        ec2_launch_template_version,
         ec2_instance_profile_name,
         ec2_spot_fleet_role_name,
         ec2_placement_group,
@@ -449,6 +453,8 @@ def launch(
             min_root_ebs_size_gb=ec2_min_root_ebs_size_gb,
             vpc_id=ec2_vpc_id,
             subnet_id=ec2_subnet_id,
+            launch_template_id=ec2_launch_template_id,
+            launch_template_version=ec2_launch_template_version,
             instance_profile_name=ec2_instance_profile_name,
             spot_fleet_role_name=ec2_spot_fleet_role_name,
             placement_group=ec2_placement_group,
