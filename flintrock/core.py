@@ -580,7 +580,7 @@ def ensure_java(client: paramiko.client.SSHClient, java_version: int):
     logger.info("[{h}] Installing AdoptOpenJDK Java {j}...".format(h=host, j=java_version))
 
     install_adoptopenjdk_repo(client)
-    java_package = "adoptopenjdk-{j}-hotspot".format(j=java_version)
+    java_package = "java-1.8.0-openjdk-devel.x86_64"
     ssh_check_output(
         client=client,
         command="""
