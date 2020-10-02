@@ -30,7 +30,7 @@ from .exceptions import (
     Error)
 from flintrock import __version__
 from .util import spark_hadoop_build_version
-from .services import HDFS, Spark  # TODO: Remove this dependency.
+from .services import HDFS, Spark, ALLUXIO  # TODO: Remove this dependency.
 
 FROZEN = getattr(sys, 'frozen', False)
 
@@ -304,6 +304,10 @@ def cli(cli_context, config, provider, debug):
               default='https://www.apache.org/dyn/closer.lua?action=download&filename=hadoop/common/hadoop-{v}/',
               show_default=True,
               callback=build_hdfs_download_url)
+@click.option('--install-alluxio/--no-install-alluxio', default=False)
+@click.option('--alluxio-version', default='1.8.1')
+@click.option('--alluxio-download-source',
+              help="URL to download Alluxio from.")
 @click.option('--install-spark/--no-install-spark', default=True)
 @click.option('--spark-executor-instances', default=1,
               help="How many executor instances per worker.")
@@ -389,6 +393,9 @@ def launch(
         install_hdfs,
         hdfs_version,
         hdfs_download_source,
+        install_alluxio,
+        alluxio_version,
+        alluxio_download_source,
         install_spark,
         spark_executor_instances,
         spark_version,
@@ -499,6 +506,12 @@ def launch(
                 hadoop_version=hdfs_version,
             )
         services += [spark]
+    if install_alluxio:
+        alluxio = ALLUXIO(
+            version=alluxio_version,
+            download_source=alluxio_download_source,
+        )
+        services += [alluxio]
 
     logger.info(
         "Launching 1 master and {n} slave{s}...".format(
