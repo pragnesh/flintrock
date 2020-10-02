@@ -443,9 +443,8 @@ def generate_template_mapping(
         'master_host': cluster.master_host,
         'master_private_host': cluster.master_private_host,
         'slave_ips': '\n'.join(cluster.slave_ips),
-        'slave_hosts': '\n'.join(cluster.slave_hosts),
-        'slave_private_hosts': '\n'.join(cluster.slave_private_hosts),
-
+        'slave_hosts': '\n'.join([cluster.master_host] + cluster.slave_hosts),
+        'slave_private_hosts': '\n'.join([cluster.master_private_host] + cluster.slave_private_hosts),
         'hadoop_version': hadoop_version,
         'hadoop_short_version': '.'.join(hadoop_version.split('.')[:2]),
         'spark_version': spark_version,
