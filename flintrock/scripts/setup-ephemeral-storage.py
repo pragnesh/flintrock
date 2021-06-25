@@ -217,6 +217,7 @@ if __name__ == '__main__':
             BlockDevice(
                 kname=device.kname,
                 mountpoint='/media/ephemeral' + str(num)))
+        break
 
     unmount_devices(ephemeral_devices)
     format_devices(ephemeral_devices)
