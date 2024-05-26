@@ -10,7 +10,7 @@ from collections import namedtuple
 import time
 
 # External modules
-import paramiko
+from pssh.clients import SSHClient
 
 # Flintrock modules
 from .core import (
@@ -80,7 +80,7 @@ class FlintrockService:
 
     def install(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         """
         Install the service on a node via the provided SSH client. This typically
@@ -93,7 +93,7 @@ class FlintrockService:
 
     def configure(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         """
         Configure the installed service on a node via the provided SSH client. This
@@ -106,7 +106,7 @@ class FlintrockService:
 
     def configure_master(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         """
         Configure the service master on a node via the provided SSH client after the
@@ -120,7 +120,7 @@ class FlintrockService:
 
     def configure_slave(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         """
         Configure a service slave on a node via the provided SSH client after the
@@ -155,23 +155,22 @@ class HDFS(FlintrockService):
 
     def install(
         self,
-        ssh_client: paramiko.client.SSHClient,
+        ssh_client: SSHClient,
         cluster: FlintrockCluster,
     ):
         logger.info(
             "[{h}] Installing HDFS..."
-            .format(h=ssh_client.get_transport().getpeername()[0])
+            .format(h=ssh_client.host)
         )
 
-        with ssh_client.open_sftp() as sftp:
-            sftp.put(
-                localpath=os.path.join(SCRIPTS_DIR, 'download-package.py'),
-                remotepath='/tmp/download-package.py')
+        ssh_client.copy_file(
+            local_file=os.path.join(SCRIPTS_DIR, 'download-package.py'),
+            remote_file='/tmp/download-package.py')
 
         logger.debug(
             "[{h}] Downloading Hadoop from: {s}"
             .format(
-                h=ssh_client.get_transport().getpeername()[0],
+                h=ssh_client.host,
                 s=self.download_source,
             )
         )
@@ -195,7 +194,7 @@ class HDFS(FlintrockService):
 
     def configure(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         # TODO: os.walk() through these files.
         template_paths = [
@@ -234,9 +233,9 @@ class HDFS(FlintrockService):
     #       stuff out of configure() into configure_master() and configure_slave().
     def configure_master(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
-        host = ssh_client.get_transport().getpeername()[0]
+        host = ssh_client.host
         logger.info("[{h}] Configuring HDFS master...".format(h=host))
 
         ssh_check_output(
@@ -340,24 +339,23 @@ class Spark(FlintrockService):
 
     def install(
         self,
-        ssh_client: paramiko.client.SSHClient,
+        ssh_client: SSHClient,
         cluster: FlintrockCluster,
     ):
         logger.info(
             "[{h}] Installing Spark..."
-            .format(h=ssh_client.get_transport().getpeername()[0])
+            .format(h=ssh_client.host)
         )
 
         if self.version:
-            with ssh_client.open_sftp() as sftp:
-                sftp.put(
-                    localpath=os.path.join(SCRIPTS_DIR, 'download-package.py'),
-                    remotepath='/tmp/download-package.py')
+            ssh_client.copy_file(
+                local_file=os.path.join(SCRIPTS_DIR, 'download-package.py'),
+                remote_file='/tmp/download-package.py')
 
             logger.debug(
                 "[{h}] Downloading Spark from: {s}"
                 .format(
-                    h=ssh_client.get_transport().getpeername()[0],
+                    h=ssh_client.host,
                     s=self.download_source,
                 )
             )
@@ -382,7 +380,7 @@ class Spark(FlintrockService):
             logger.debug(
                 "[{h}] Cloning Spark at {c} from: {s}"
                 .format(
-                    h=ssh_client.get_transport().getpeername()[0],
+                    h=ssh_client.host,
                     c=self.git_commit,
                     s=self.git_repository,
                 )
@@ -417,7 +415,7 @@ class Spark(FlintrockService):
 
     def configure(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
 
         template_paths = [
@@ -453,9 +451,9 @@ class Spark(FlintrockService):
     #       a sleep() before starting the master.
     def configure_master(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
-        host = ssh_client.get_transport().getpeername()[0]
+        host = ssh_client.host
         logger.info("[{h}] Configuring Spark master...".format(h=host))
 
         # This loop is a band-aid for: https://github.com/nchammas/flintrock/issues/129
@@ -549,15 +547,14 @@ class ALLUXIO(FlintrockService):
 
     def install(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         logger.info("[{h}] Installing Alluxio...".format(
-            h=ssh_client.get_transport().getpeername()[0]))
+            h=ssh_client.host))
 
-        with ssh_client.open_sftp() as sftp:
-            sftp.put(
-                localpath=os.path.join(SCRIPTS_DIR, 'download-package.py'),
-                remotepath='/tmp/download-package.py')
+        ssh_client.copy_file(
+            local_file=os.path.join(SCRIPTS_DIR, 'download-package.py'),
+            remote_file='/tmp/download-package.py')
 
         ssh_check_output(
             client=ssh_client,
@@ -578,7 +575,7 @@ class ALLUXIO(FlintrockService):
 
     def configure(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
         # TODO: os.walk() through these files.
         template_paths = [
@@ -616,9 +613,9 @@ class ALLUXIO(FlintrockService):
     #       stuff out of configure() into configure_master() and configure_slave().
     def configure_master(
             self,
-            ssh_client: paramiko.client.SSHClient,
+            ssh_client: SSHClient,
             cluster: FlintrockCluster):
-        host = ssh_client.get_transport().getpeername()[0]
+        host = ssh_client.host
         logger.info("[{h}] Configuring Alluxio master...".format(h=host))
 
         ssh_check_output(

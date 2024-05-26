@@ -9,7 +9,7 @@ import logging
 from concurrent.futures import FIRST_EXCEPTION
 
 # External modules
-import paramiko
+from pssh.clients import SSHClient
 
 # Flintrock modules
 from .ssh import get_ssh_client, ssh_check_output, ssh, SSHKeyPair
@@ -509,7 +509,7 @@ def run_against_hosts(*, partial_func: functools.partial, hosts: list):
             future.result()
 
 
-def get_installed_java_version(client: paramiko.client.SSHClient):
+def get_installed_java_version(client: SSHClient):
     """
     :return: the major version (5,6,7,8...) of the currently installed Java or None if not installed
     """
@@ -542,7 +542,7 @@ def get_installed_java_version(client: paramiko.client.SSHClient):
     return None
 
 
-def ensure_java(client: paramiko.client.SSHClient, java_version: int):
+def ensure_java(client: SSHClient, java_version: int):
     """
     Ensures that Java is available on the machine and that it has a
     version of at least java_version.
@@ -555,7 +555,7 @@ def ensure_java(client: paramiko.client.SSHClient, java_version: int):
         minimum version of Java required
     :return:
     """
-    host = client.get_transport().getpeername()[0]
+    host = client.host
     installed_java_version = get_installed_java_version(client)
 
     if installed_java_version == java_version:
@@ -599,14 +599,13 @@ def ensure_java(client: paramiko.client.SSHClient, java_version: int):
         """.format(jp=java_package))
 
 
-def install_adoptium_repo(client):
+def install_adoptium_repo(client: SSHClient):
     """
     Installs the adoptium.repo file into /etc/yum.repos.d/
     """
-    with client.open_sftp() as sftp:
-        sftp.put(
-            localpath=os.path.join(SCRIPTS_DIR, 'adoptium.repo'),
-            remotepath='/tmp/adoptium.repo')
+    client.copy_file(
+        local_file=os.path.join(SCRIPTS_DIR, 'adoptium.repo'),
+        remote_file='/tmp/adoptium.repo')
     ssh_check_output(
         client=client,
         command="""
@@ -621,7 +620,7 @@ def setup_node(
         # Change this to take host, user, and identity_file?
         # Add some kind of caching for SSH connections so that they
         # can be looked up by host and reused?
-        ssh_client: paramiko.client.SSHClient,
+        ssh_client: SSHClient,
         services: list,
         java_version: int,
         cluster: FlintrockCluster):
@@ -631,7 +630,7 @@ def setup_node(
     Cluster methods like provision_node() and add_slaves_node() should
     delegate the main work of setting up new nodes to this function.
     """
-    host = ssh_client.get_transport().getpeername()[0]
+    host = ssh_client.host
     ssh_check_output(
         client=ssh_client,
         command="""
@@ -645,10 +644,9 @@ def setup_node(
             private_key=shlex.quote(cluster.ssh_key_pair.private),
             public_key=shlex.quote(cluster.ssh_key_pair.public)))
 
-    with ssh_client.open_sftp() as sftp:
-        sftp.put(
-            localpath=os.path.join(SCRIPTS_DIR, 'setup-ephemeral-storage.py'),
-            remotepath='/tmp/setup-ephemeral-storage.py')
+    ssh_client.copy_file(
+        local_file=os.path.join(SCRIPTS_DIR, 'setup-ephemeral-storage.py'),
+        remote_file='/tmp/setup-ephemeral-storage.py')
 
     logger.info("[{h}] Configuring ephemeral storage...".format(h=host))
     # TODO: Print some kind of warning if storage is large, since formatting
@@ -931,12 +929,12 @@ def copy_file_node(
             # TODO: Catch more specific exception.
             raise Exception("Remote directory does not exist: {d}".format(d=remote_dir))
 
-        with ssh_client.open_sftp() as sftp:
-            logger.info("[{h}] Copying file...".format(h=host))
 
-            sftp.put(localpath=local_path, remotepath=remote_path)
+        logger.info("[{h}] Copying file...".format(h=host))
 
-            logger.info("[{h}] Copy complete.".format(h=host))
+        ssh_client.copy_file(local_file=local_path, remote_file=remote_path, recurse=True)
+
+        logger.info("[{h}] Copy complete.".format(h=host))
 
 
 # This is necessary down here since we have a circular import dependency between
