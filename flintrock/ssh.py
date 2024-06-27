@@ -75,7 +75,9 @@ def get_ssh_client(
             client = SSHClient(host,
                                user=user,
                                pkey=identity_file,
-                               timeout=3)
+                               num_retries=5,
+                               timeout=15,
+                               keepalive_seconds=15)
             if print_status:
                 logger.info("[{h}] SSH online.".format(h=host))
             break
@@ -84,6 +86,9 @@ def get_ssh_client(
             time.sleep(5)
         except AuthenticationException as e:
             logger.debug("[{h}] SSH AuthenticationException.".format(h=host))
+            time.sleep(5)
+        except ConnectionRefusedError as e:
+            logger.debug("[{h}] SSH connection refused.".format(h=host))
             time.sleep(5)
     else:
         raise SSHError(
