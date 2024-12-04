@@ -104,6 +104,9 @@ def get_ssh_client(
                 message="SSH protocol error. Possible causes include using "
                 "the wrong key file or username.",
             ) from e
+        except ConnectionRefusedError as e:
+            logger.debug("[{h}] SSH connection refused.".format(h=host))
+            time.sleep(5)
     else:
         raise SSHError(
             host=host,
