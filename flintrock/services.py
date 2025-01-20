@@ -646,7 +646,7 @@ class ALLUXIO(FlintrockService):
                             )"
                         done
                     """.format(m=shlex.quote(cluster.master_host)),
-                    timeout_seconds=90
+                    timeout_seconds=180
                 )
                 break
             except socket.timeout as e:
