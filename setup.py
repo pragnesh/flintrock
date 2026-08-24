@@ -18,7 +18,7 @@ setuptools.setup(
     author='Nicholas Chammas',
     author_email='nicholas.chammas@gmail.com',
     license='Apache License 2.0',
-    python_requires='>= 3.9',
+    python_requires='>= 3.10',
 
     # See: https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
@@ -39,7 +39,7 @@ setuptools.setup(
     ],
     keywords=['Apache Spark'],
 
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_namespace_packages(include=['flintrock', 'flintrock.*']),
     include_package_data=True,
 
     # We pin dependencies because sometimes projects do not
@@ -49,11 +49,11 @@ setuptools.setup(
     # totally break Flintrock.
     # For example: https://github.com/paramiko/paramiko/issues/615
     install_requires=[
-        'boto3 == 1.29.4',
-        'botocore == 1.32.4',
-        'click == 8.1.7',
-        'paramiko == 3.4.0',
-        'PyYAML == 6.0.2',
+        'boto3 == 1.43.78',
+        'botocore == 1.43.78',
+        'click == 8.4.2',
+        'paramiko == 5.0.0',
+        'PyYAML == 6.0.3',
     ],
 
     entry_points={

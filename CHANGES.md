@@ -7,6 +7,7 @@
 ### Changed
 
 * [#383]: Dropped support for Python 3.8 and added CI build for Python 3.13.
+* Dropped support for Python 3.9 and added CI builds for Python 3.14; bumped pinned dependencies (boto3, botocore, click, paramiko, PyYAML) to their latest releases.
 
 [#383]: https://github.com/nchammas/flintrock/pull/383
 

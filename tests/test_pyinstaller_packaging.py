@@ -36,7 +36,7 @@ def test_pyinstaller_flintrock_help(pyinstaller_flintrock):
         # misconfigured.
         """
         export LANG=en_US.UTF-8
-        {flintrock_executable}
+        {flintrock_executable} --help
         """.format(
             flintrock_executable=pyinstaller_flintrock
         ),
